@@ -4,11 +4,31 @@ import { fileURLToPath } from "node:url";
 import { products as mockProducts, orders as mockOrders, analytics as mockAnalytics } from "./data";
 import type { Product, Order } from "./data";
 
-// Resolve paths relative to workspace
+// ---------------------------------------------------------------------------
+// Path strategy:
+//   - In local dev, we write next to the source so the file persists across
+//     restarts (data/store.json relative to the workspace root).
+//   - On Vercel (and other read-only serverless environments) the source tree
+//     is immutable; we fall back to /tmp which is writable but ephemeral.
+// ---------------------------------------------------------------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DB_DIR = path.resolve(__dirname, "../../data");
-const DB_FILE = path.join(DB_DIR, "store.json");
+
+/** Try the workspace-relative data dir first; fall back to /tmp. */
+function resolveDbFile(): string {
+  // When built by Vite/Nitro the output may live at a different depth —
+  // walk up until we find a "data" sibling or hit the FS root.
+  const candidates = [
+    path.resolve(__dirname, "../../data/store.json"),
+    path.resolve(__dirname, "../../../data/store.json"),
+    path.resolve(__dirname, "../../../../data/store.json"),
+    "/tmp/store.json",
+  ];
+  return candidates[0]; // We'll fall back at runtime if the write fails
+}
+
+const DB_FILE_PRIMARY = resolveDbFile();
+const DB_FILE_TMP = "/tmp/store.json";
 
 interface DbSchema {
   products: Product[];
@@ -19,47 +39,83 @@ interface DbSchema {
 let dbMemoryCache: DbSchema | null = null;
 let writeQueue: Promise<void> = Promise.resolve();
 
-async function initDb(): Promise<DbSchema> {
-  if (dbMemoryCache) return dbMemoryCache;
-
+async function readFileSafe(filePath: string): Promise<string | null> {
   try {
-    // Ensure dir exists
-    await fs.mkdir(DB_DIR, { recursive: true });
-
-    // Try reading file
-    const fileData = await fs.readFile(DB_FILE, "utf-8");
-    dbMemoryCache = JSON.parse(fileData);
-    return dbMemoryCache!;
-  } catch (err: any) {
-    // If doesn't exist, create with initial mock data
-    if (err.code === "ENOENT") {
-      const initialDb: DbSchema = {
-        products: mockProducts,
-        orders: mockOrders,
-        analytics: mockAnalytics,
-      };
-      dbMemoryCache = initialDb;
-      await fs.writeFile(DB_FILE, JSON.stringify(initialDb, null, 2), "utf-8");
-      return initialDb;
-    }
-    throw err;
+    return await fs.readFile(filePath, "utf-8");
+  } catch {
+    return null;
   }
 }
 
-async function saveDb(data: DbSchema): Promise<void> {
-  dbMemoryCache = data;
-  
-  // Serialize writes using a promise queue to prevent simultaneous write conflicts
-  writeQueue = writeQueue.then(async () => {
+async function writeFileSafe(filePath: string, data: string): Promise<boolean> {
+  try {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, data, "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function initDb(): Promise<DbSchema> {
+  if (dbMemoryCache) return dbMemoryCache;
+
+  // 1. Try /tmp first (Vercel may already have an in-flight copy there)
+  const tmpData = await readFileSafe(DB_FILE_TMP);
+  if (tmpData) {
     try {
-      await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
-    } catch (err) {
-      console.error("Error writing database to disk:", err);
+      dbMemoryCache = JSON.parse(tmpData);
+      return dbMemoryCache!;
+    } catch { /* corrupt — fall through */ }
+  }
+
+  // 2. Try the workspace-bundled JSON (read-only on serverless, that's OK)
+  const primaryData = await readFileSafe(DB_FILE_PRIMARY);
+  if (primaryData) {
+    try {
+      dbMemoryCache = JSON.parse(primaryData);
+      return dbMemoryCache!;
+    } catch { /* corrupt — fall through */ }
+  }
+
+  // 3. Seed from TypeScript mock data
+  const initialDb: DbSchema = {
+    products: mockProducts,
+    orders: mockOrders,
+    analytics: mockAnalytics,
+  };
+  dbMemoryCache = initialDb;
+
+  // Attempt to persist seed (will silently succeed in dev, silently fail on Vercel)
+  const json = JSON.stringify(initialDb, null, 2);
+  const wrotePrimary = await writeFileSafe(DB_FILE_PRIMARY, json);
+  if (!wrotePrimary) {
+    await writeFileSafe(DB_FILE_TMP, json);
+  }
+
+  return initialDb;
+}
+
+async function saveDb(data: DbSchema): Promise<void> {
+  // Always update the in-memory cache immediately so reads are consistent
+  dbMemoryCache = data;
+
+  // Enqueue the disk write so concurrent mutations don't interleave
+  writeQueue = writeQueue.then(async () => {
+    const json = JSON.stringify(data, null, 2);
+    // Try primary (dev) path first; on serverless this will fail → use /tmp
+    const wrotePrimary = await writeFileSafe(DB_FILE_PRIMARY, json);
+    if (!wrotePrimary) {
+      await writeFileSafe(DB_FILE_TMP, json);
     }
   });
-  
+
   await writeQueue;
 }
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 export async function getProducts(): Promise<Product[]> {
   const db = await initDb();
@@ -71,17 +127,18 @@ export async function getProductById(id: string): Promise<Product | undefined> {
   return db.products.find((p) => p.id === id);
 }
 
-export async function addProduct(product: Omit<Product, "id" | "createdAt" | "sales" | "rating" | "reviews">): Promise<Product> {
+export async function addProduct(
+  product: Omit<Product, "id" | "createdAt" | "sales" | "rating" | "reviews">
+): Promise<Product> {
   const db = await initDb();
-  
-  // Calculate next ID
+
   const maxId = db.products.reduce((max, p) => Math.max(max, parseInt(p.id) || 0), 0);
   const nextId = (maxId + 1).toString();
 
   const newProduct: Product = {
     ...product,
     id: nextId,
-    rating: 5.0, // default rating
+    rating: 5.0,
     reviews: 0,
     sales: 0,
     createdAt: new Date().toISOString().split("T")[0],
@@ -99,13 +156,10 @@ export async function getOrders(): Promise<Order[]> {
 
 export async function addOrder(productId: string, buyerEmail: string): Promise<Order> {
   const db = await initDb();
-  
-  const product = db.products.find((p) => p.id === productId);
-  if (!product) {
-    throw new Error(`Product with ID ${productId} not found.`);
-  }
 
-  // Create new order
+  const product = db.products.find((p) => p.id === productId);
+  if (!product) throw new Error(`Product with ID ${productId} not found.`);
+
   const orderCount = db.orders.length;
   const nextOrderNum = (orderCount + 1).toString().padStart(3, "0");
   const orderId = `ORD-${nextOrderNum}`;
@@ -120,35 +174,30 @@ export async function addOrder(productId: string, buyerEmail: string): Promise<O
     status: "completed",
   };
 
-  db.orders.unshift(newOrder); // Add to top of orders
+  db.orders.unshift(newOrder);
 
-  // Update product stats
   product.sales += 1;
-
-  // Update analytics stats
   db.analytics.totalSales += 1;
-  db.analytics.totalRevenue += product.price;
-  db.analytics.avgOrderValue = parseFloat((db.analytics.totalRevenue / db.analytics.totalSales).toFixed(2));
+  db.analytics.totalRevenue = parseFloat((db.analytics.totalRevenue + product.price).toFixed(2));
+  db.analytics.avgOrderValue = parseFloat(
+    (db.analytics.totalRevenue / db.analytics.totalSales).toFixed(2)
+  );
 
-  // Update monthly revenue (add to current month, which is June)
-  const currentMonthName = new Date().toLocaleString("en-US", { month: "short" }); // e.g. "Jun"
+  const currentMonthName = new Date().toLocaleString("en-US", { month: "short" });
   const monthData = db.analytics.monthlyRevenue.find((m) => m.month === currentMonthName);
   if (monthData) {
-    monthData.revenue += product.price;
+    monthData.revenue = parseFloat((monthData.revenue + product.price).toFixed(2));
   } else {
     db.analytics.monthlyRevenue.push({ month: currentMonthName, revenue: product.price });
   }
 
-  // Update top products sales/revenue
   const topProd = db.analytics.topProducts.find((p) => p.name === product.title);
   if (topProd) {
     topProd.sales += 1;
-    topProd.revenue += product.price;
+    topProd.revenue = parseFloat((topProd.revenue + product.price).toFixed(2));
   } else {
     db.analytics.topProducts.push({ name: product.title, sales: 1, revenue: product.price });
   }
-  
-  // Sort top products by revenue descending
   db.analytics.topProducts.sort((a, b) => b.revenue - a.revenue);
 
   await saveDb(db);
