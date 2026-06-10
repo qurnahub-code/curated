@@ -2,8 +2,12 @@ import { PrismaClient } from '@prisma/client';
 import { products as mockProducts, orders as mockOrders, analytics as mockAnalytics } from "./data";
 import type { Product, Order } from "./data";
 
-const prisma = new PrismaClient();
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
