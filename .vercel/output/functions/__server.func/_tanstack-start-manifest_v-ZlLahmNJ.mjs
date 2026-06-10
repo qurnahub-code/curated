@@ -1,0 +1,4 @@
+const tsrStartManifest = () => ({ routes: { __root__: { filePath: "D:/Github/Portfolio/niche-storefront-dashboard-main/niche-storefront-dashboard-main/src/routes/__root.tsx", children: ["/", "/product/$productId"], preloads: ["/assets/index-BC_w243X.js"], scripts: [{ attrs: { type: "module", async: true, src: "/assets/index-BC_w243X.js" } }] }, "/": { filePath: "D:/Github/Portfolio/niche-storefront-dashboard-main/niche-storefront-dashboard-main/src/routes/index.tsx", children: void 0, preloads: ["/assets/index-54Dnzd44.js", "/assets/label-C3A4Dm-n.js"] }, "/product/$productId": { filePath: "D:/Github/Portfolio/niche-storefront-dashboard-main/niche-storefront-dashboard-main/src/routes/product/$productId.tsx", children: void 0, preloads: ["/assets/_productId-DS22jTeo.js", "/assets/label-C3A4Dm-n.js"] } } });
+export {
+  tsrStartManifest
+};
