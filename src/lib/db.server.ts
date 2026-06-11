@@ -13,22 +13,24 @@ const prisma = new PrismaClient({ adapter });
 // ---------------------------------------------------------------------------
 
 export async function getProducts(): Promise<Product[]> {
-  return await prisma.product.findMany({
+  const products = await prisma.product.findMany({
     orderBy: { createdAt: 'desc' }
   });
+  return products.map(p => ({ ...p, createdAt: p.createdAt.toISOString() }));
 }
 
 export async function getProductById(id: string): Promise<Product | undefined> {
   const product = await prisma.product.findUnique({
     where: { id }
   });
-  return product || undefined;
+  if (!product) return undefined;
+  return { ...product, createdAt: product.createdAt.toISOString() };
 }
 
 export async function addProduct(
   product: Omit<Product, "id" | "createdAt" | "sales" | "rating" | "reviews">
 ): Promise<Product> {
-  return await prisma.product.create({
+  const newProduct = await prisma.product.create({
     data: {
       ...product,
       rating: 5.0,
@@ -36,6 +38,7 @@ export async function addProduct(
       sales: 0,
     }
   });
+  return { ...newProduct, createdAt: newProduct.createdAt.toISOString() };
 }
 
 export async function getOrders(): Promise<Order[]> {

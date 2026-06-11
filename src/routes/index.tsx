@@ -4,6 +4,9 @@ import { ShoppingBag, Store, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductGrid } from "@/components/ProductGrid";
 import { SellerDashboard } from "@/components/SellerDashboard";
+import { AuthForm } from "@/components/AuthForm";
+import { useAuth } from "@/lib/AuthContext";
+import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,6 +27,7 @@ function Index() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [sortBy, setSortBy] = useState("featured");
+  const { session, isLoading } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
@@ -100,8 +104,16 @@ function Index() {
               onSortChange={setSortBy}
             />
           </div>
-        ) : (
+        ) : isLoading ? (
+          <div className="flex justify-center p-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : session ? (
           <SellerDashboard />
+        ) : (
+          <div className="flex min-h-[60vh] items-center justify-center py-12">
+            <AuthForm />
+          </div>
         )}
       </main>
 

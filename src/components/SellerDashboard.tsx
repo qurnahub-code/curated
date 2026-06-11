@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Package, BarChart3, ShoppingBag, Plus, Loader2 } from "lucide-react";
+import { Package, BarChart3, ShoppingBag, Plus, Loader2, LogOut } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ListingsTab } from "./seller-tabs/ListingsTab";
@@ -28,6 +28,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import imageCompression from "browser-image-compression";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/AuthContext";
 
 const CREATION_CATEGORIES = [
   "Templates",
@@ -50,8 +53,10 @@ export function SellerDashboard() {
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
-  const [image, setImage] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [tagsInput, setTagsInput] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const { user, signOut } = useAuth();
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ["seller-dashboard-data"],
@@ -70,18 +75,20 @@ export function SellerDashboard() {
       setPrice("");
       setCategory("");
       setDescription("");
-      setImage("");
+      setImageFile(null);
       setTagsInput("");
+      setIsUploading(false);
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to create listing.");
+      setIsUploading(false);
     },
   });
 
-  const handleCreateListing = (e: React.FormEvent) => {
+  const handleCreateListing = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !price || !category || !description || !image) {
-      toast.error("Please fill in all required fields.");
+    if (!title || !price || !category || !description || !imageFile) {
+      toast.error("Please fill in all required fields and select an image.");
       return;
     }
 
@@ -96,14 +103,44 @@ export function SellerDashboard() {
       .map((t) => t.trim().toLowerCase())
       .filter((t) => t.length > 0);
 
-    createListingMutation.mutate({
-      title,
-      description,
-      price: priceNum,
-      category,
-      image,
-      tags,
-    });
+    try {
+      setIsUploading(true);
+
+      // Compress image
+      const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1024,
+        useWebWorker: true,
+      };
+      const compressedFile = await imageCompression(imageFile, options);
+
+      // Upload to Supabase
+      const fileName = `${Date.now()}_${compressedFile.name}`;
+      const { data, error } = await supabase.storage
+        .from("product-assets")
+        .upload(fileName, compressedFile);
+
+      if (error) {
+        throw error;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("product-assets")
+        .getPublicUrl(fileName);
+
+      createListingMutation.mutate({
+        title,
+        description,
+        price: priceNum,
+        category,
+        image: publicUrl,
+        tags,
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload image.");
+      setIsUploading(false);
+    }
   };
 
   if (isLoading) {
@@ -149,15 +186,26 @@ export function SellerDashboard() {
           </h2>
           <p className="font-body text-sm text-muted-foreground">
             Manage your products, track performance, and view orders
+            {user && ` • Logged in as ${user.email}`}
           </p>
         </div>
-        <Button
-          onClick={() => setOpenNewListing(true)}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 font-body gap-2 cursor-pointer"
-        >
-          <Plus className="h-4 w-4" />
-          New Listing
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={signOut}
+            className="font-body gap-2 cursor-pointer"
+          >
+            <LogOut className="h-4 w-4" />
+            Sign Out
+          </Button>
+          <Button
+            onClick={() => setOpenNewListing(true)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body gap-2 cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            New Listing
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -264,16 +312,16 @@ export function SellerDashboard() {
                 </div>
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="image" className="font-body text-sm font-medium">
-                    Image URL *
+                    Image File *
                   </Label>
                   <Input
                     id="image"
-                    placeholder="https://images.unsplash.com/...w=600"
-                    value={image}
-                    onChange={(e) => setImage(e.target.value)}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setImageFile(e.target.files?.[0] || null)}
                     required
-                    disabled={createListingMutation.isPending}
-                    className="font-body"
+                    disabled={createListingMutation.isPending || isUploading}
+                    className="font-body file:mr-4 file:py-1 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                   />
                 </div>
               </div>
@@ -323,12 +371,12 @@ export function SellerDashboard() {
               <Button
                 type="submit"
                 className="font-body bg-primary text-primary-foreground hover:bg-primary/90 gap-2 cursor-pointer"
-                disabled={createListingMutation.isPending}
+                disabled={createListingMutation.isPending || isUploading}
               >
-                {createListingMutation.isPending ? (
+                {(createListingMutation.isPending || isUploading) ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Creating...
+                    {isUploading ? "Uploading..." : "Creating..."}
                   </>
                 ) : (
                   <>Create Listing</>
