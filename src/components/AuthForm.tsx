@@ -8,8 +8,12 @@ import { Loader2 } from "lucide-react";
 
 type AuthState = "login" | "signup" | "forgot_password";
 
-export function AuthForm() {
-  const [authState, setAuthState] = useState<AuthState>("login");
+interface AuthFormProps {
+  initialAuthState?: AuthState;
+}
+
+export function AuthForm({ initialAuthState = "login" }: AuthFormProps) {
+  const [authState, setAuthState] = useState<AuthState>(initialAuthState);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ShoppingBag, Store, Sparkles } from "lucide-react";
+import { ShoppingBag, LayoutDashboard, Sparkles, LogOut, LogIn, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductGrid } from "@/components/ProductGrid";
 import { SellerDashboard } from "@/components/SellerDashboard";
@@ -20,21 +20,24 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type ViewMode = "browse" | "sell";
+type ViewMode = "browse" | "login" | "signup" | "dashboard";
 
 function Index() {
   const [mode, setMode] = useState<ViewMode>("browse");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [sortBy, setSortBy] = useState("featured");
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, signOut } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMode("browse")}
+            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+          >
             <Sparkles className="h-5 w-5 text-primary" />
             <span
               className="text-xl font-bold tracking-tight"
@@ -42,41 +45,81 @@ function Index() {
             >
               Curated
             </span>
-          </div>
+          </button>
 
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-1">
-            <Button
-              variant={mode === "browse" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setMode("browse")}
-              className={`font-body gap-1.5 ${
-                mode === "browse"
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <ShoppingBag className="h-4 w-4" />
-              Browse
-            </Button>
-            <Button
-              variant={mode === "sell" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setMode("sell")}
-              className={`font-body gap-1.5 ${
-                mode === "sell"
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Store className="h-4 w-4" />
-              Sell
-            </Button>
+          <div className="flex items-center gap-2">
+            {!session ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={mode === "login" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setMode("login")}
+                  className="font-body gap-1.5 cursor-pointer"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Sign In
+                </Button>
+                <Button
+                  variant={mode === "signup" ? "secondary" : "default"}
+                  size="sm"
+                  onClick={() => setMode("signup")}
+                  className="font-body gap-1.5 cursor-pointer"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Sign Up
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={mode === "browse" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setMode("browse")}
+                  className="font-body gap-1.5 cursor-pointer hidden sm:flex"
+                >
+                  <ShoppingBag className="h-4 w-4" />
+                  Storefront
+                </Button>
+                <Button
+                  variant={mode === "dashboard" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setMode("dashboard")}
+                  className="font-body gap-1.5 cursor-pointer"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={signOut}
+                  className="font-body gap-1.5 cursor-pointer ml-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Log Out
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {mode === "browse" ? (
+        {isLoading ? (
+          <div className="flex justify-center p-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : mode === "login" ? (
+          <div className="flex min-h-[60vh] items-center justify-center py-12">
+            <AuthForm initialAuthState="login" />
+          </div>
+        ) : mode === "signup" ? (
+          <div className="flex min-h-[60vh] items-center justify-center py-12">
+            <AuthForm initialAuthState="signup" />
+          </div>
+        ) : mode === "dashboard" && session ? (
+          <SellerDashboard />
+        ) : (
           <div className="flex flex-col gap-8">
             {/* Hero */}
             <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-secondary to-accent/10 p-8 sm:p-12">
@@ -104,16 +147,6 @@ function Index() {
               onSortChange={setSortBy}
             />
           </div>
-        ) : isLoading ? (
-          <div className="flex justify-center p-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : session ? (
-          <SellerDashboard />
-        ) : (
-          <div className="flex min-h-[60vh] items-center justify-center py-12">
-            <AuthForm />
-          </div>
         )}
       </main>
 
@@ -130,9 +163,22 @@ function Index() {
                 Curated
               </span>
             </div>
-            <p className="font-body text-xs text-muted-foreground">
-              © {new Date().getFullYear()} Curated Marketplace. All rights reserved.
-            </p>
+            
+            <div className="flex items-center gap-6">
+              {session && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={signOut}
+                  className="font-body text-xs text-muted-foreground hover:text-foreground h-auto p-0 cursor-pointer"
+                >
+                  Log Out
+                </Button>
+              )}
+              <p className="font-body text-xs text-muted-foreground">
+                © {new Date().getFullYear()} Curated Marketplace. All rights reserved.
+              </p>
+            </div>
           </div>
         </div>
       </footer>
