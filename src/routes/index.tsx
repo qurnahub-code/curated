@@ -131,7 +131,7 @@ function Index() {
               </span>
             </div>
             <p className="font-body text-xs text-muted-foreground">
-              A portfolio showcase — frontend prototype with mock data
+              © {new Date().getFullYear()} Curated Marketplace. All rights reserved.
             </p>
           </div>
         </div>
