@@ -1,9 +1,9 @@
-import { createFileRoute, useParams } from "@tanstack/react-router";
-import { ArrowLeft, Star, Download, Shield, Loader2 } from "lucide-react";
+import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router";
+import { ArrowLeft, Star, Download, Shield, Loader2, CheckCircle2, FileType2, Layers, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchProductById, purchaseProduct } from "@/lib/api/storefront.functions";
+import { fetchProductById, purchaseProduct, fetchProducts } from "@/lib/api/storefront.functions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ProductCard } from "@/components/ProductCard";
 
 export const Route = createFileRoute("/product/$productId")({
   head: () => ({
@@ -38,7 +39,7 @@ function ProductDetailSkeleton() {
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
           <Skeleton className="aspect-[4/3] w-full rounded-2xl" />
           <div className="flex flex-col gap-6">
             <div>
@@ -67,6 +68,7 @@ function ProductDetailSkeleton() {
 
 function ProductDetail() {
   const { productId } = useParams({ from: "/product/$productId" });
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [openCheckout, setOpenCheckout] = useState(false);
   const [buyerEmail, setBuyerEmail] = useState("");
@@ -75,6 +77,16 @@ function ProductDetail() {
     queryKey: ["product", productId],
     queryFn: () => fetchProductById({ data: { productId } }),
   });
+
+  const { data: categoryProducts = [] } = useQuery({
+    queryKey: ["similar-products", product?.category],
+    queryFn: () => fetchProducts({ data: { category: product?.category, searchQuery: "", sortBy: "featured" } }),
+    enabled: !!product?.category,
+  });
+
+  const similarProducts = categoryProducts
+    .filter((p) => p.id !== productId)
+    .slice(0, 4);
 
   const purchaseMutation = useMutation({
     mutationFn: (email: string) =>
@@ -141,15 +153,47 @@ function ProductDetail() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
           {/* Image */}
-          <div className="overflow-hidden rounded-2xl border border-border aspect-[4/3] bg-muted flex items-center justify-center">
-            <img
-              src={product.image}
-              alt={product.title}
-              className="h-full w-full object-cover transition-all"
-            />
+          <div className="flex flex-col gap-6">
+            <div className="overflow-hidden rounded-2xl border border-border aspect-[4/3] bg-muted flex items-center justify-center">
+              <img
+                src={product.image}
+                alt={product.title}
+                className="h-full w-full object-cover transition-all"
+              />
+            </div>
+            
+            <div className="rounded-xl border border-border bg-card p-6">
+               <h3 className="font-display text-lg font-semibold mb-4">Highlights</h3>
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                 <div className="flex items-center gap-3">
+                   <div className="rounded-md bg-primary/10 p-2 text-primary">
+                     <CheckCircle2 className="h-4 w-4" />
+                   </div>
+                   <span className="font-body text-sm">Commercial License</span>
+                 </div>
+                 <div className="flex items-center gap-3">
+                   <div className="rounded-md bg-primary/10 p-2 text-primary">
+                     <FileType2 className="h-4 w-4" />
+                   </div>
+                   <span className="font-body text-sm">Multiple Formats</span>
+                 </div>
+                 <div className="flex items-center gap-3">
+                   <div className="rounded-md bg-primary/10 p-2 text-primary">
+                     <Layers className="h-4 w-4" />
+                   </div>
+                   <span className="font-body text-sm">Fully Layered</span>
+                 </div>
+                 <div className="flex items-center gap-3">
+                   <div className="rounded-md bg-primary/10 p-2 text-primary">
+                     <RefreshCcw className="h-4 w-4" />
+                   </div>
+                   <span className="font-body text-sm">Lifetime Updates</span>
+                 </div>
+               </div>
+            </div>
           </div>
 
           {/* Details */}
@@ -159,21 +203,22 @@ function ProductDetail() {
                 {product.category}
               </Badge>
               <h1
-                className="text-3xl font-bold tracking-tight text-foreground"
+                className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
                 style={{ fontFamily: "var(--font-display)" }}
               >
                 {product.title}
               </h1>
               <div className="mt-3 flex items-center gap-3">
                 <div className="flex items-center gap-1">
-                  <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                  <span className="font-body text-sm font-medium text-foreground">
+                  <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                  <span className="font-body text-base font-medium text-foreground">
                     {product.rating}
                   </span>
                   <span className="font-body text-sm text-muted-foreground">
                     ({product.reviews} reviews)
                   </span>
                 </div>
+                <div className="h-4 w-px bg-border" />
                 <span className="font-body text-sm text-muted-foreground">
                   {product.sales} sales
                 </span>
@@ -191,16 +236,22 @@ function ProductDetail() {
                   {product.seller}
                 </p>
                 <p className="font-body text-xs text-muted-foreground">
-                  Top seller
+                  Top tier seller
                 </p>
               </div>
+              <Button variant="outline" size="sm" className="ml-auto font-body text-xs">
+                View Profile
+              </Button>
             </div>
 
-            <p className="font-body text-base leading-relaxed text-muted-foreground">
-              {product.description}
-            </p>
+            <div className="prose prose-sm dark:prose-invert">
+              <h3 className="font-display text-lg font-semibold text-foreground mb-2">Description</h3>
+              <p className="font-body text-base leading-relaxed text-muted-foreground">
+                {product.description}
+              </p>
+            </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 pt-2">
               {product.tags.map((tag) => (
                 <Badge
                   key={tag}
@@ -212,36 +263,76 @@ function ProductDetail() {
               ))}
             </div>
 
-            <div className="flex items-center gap-3 rounded-xl bg-muted/50 p-4">
-              <Shield className="h-5 w-5 text-accent shrink-0" />
+            <div className="flex items-center gap-3 rounded-xl bg-muted/50 p-4 border border-border">
+              <Shield className="h-6 w-6 text-emerald-500 shrink-0" />
               <div>
                 <p className="font-body text-sm font-medium text-foreground">
-                  Instant download
+                  Instant & Secure Download
                 </p>
                 <p className="font-body text-xs text-muted-foreground">
-                  Secure payment. Files delivered immediately after purchase.
+                  Secure encrypted payment. Files delivered immediately after purchase.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-4 pt-2">
-              <span
-                className="text-3xl font-bold text-foreground"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                ${product.price}
-              </span>
+            <div className="sticky bottom-4 z-10 mt-auto flex items-center gap-4 rounded-2xl border border-border bg-background/95 p-4 shadow-lg backdrop-blur-sm">
+              <div className="flex flex-col">
+                <span className="font-body text-xs text-muted-foreground">Total Price</span>
+                <span
+                  className="text-3xl font-bold text-foreground"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  ${product.price}
+                </span>
+              </div>
               <Button
                 size="lg"
                 onClick={() => setOpenCheckout(true)}
-                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 font-body gap-2 cursor-pointer"
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 font-body gap-2 cursor-pointer h-12 text-base"
               >
-                <Download className="h-4 w-4" />
+                <Download className="h-5 w-5" />
                 Buy Now
               </Button>
             </div>
           </div>
         </div>
+
+        {/* Similar Products Section */}
+        {similarProducts.length > 0 && (
+          <div className="mt-24 border-t border-border pt-16">
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                <h2 
+                  className="text-2xl font-bold tracking-tight text-foreground"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  Similar products
+                </h2>
+                <p className="font-body text-sm text-muted-foreground mt-1">
+                  More highly-rated items from the {product.category} category.
+                </p>
+              </div>
+              <Button variant="ghost" className="font-body" onClick={() => window.history.back()}>
+                View all
+              </Button>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {similarProducts.map((p) => (
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  onClick={() =>
+                    navigate({
+                      to: "/product/$productId",
+                      params: { productId: p.id },
+                    })
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Checkout Modal Dialog */}
