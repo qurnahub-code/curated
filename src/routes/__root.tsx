@@ -116,7 +116,9 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
-import { AuthProvider } from "../lib/AuthContext";
+import { AuthProvider, useAuth } from "../lib/AuthContext";
+import { ShoppingBag, LayoutDashboard, Sparkles, LogOut, LogIn, UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
@@ -124,9 +126,134 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
+        <div className="min-h-screen flex flex-col bg-background">
+          <SiteHeader />
+          <main className="flex-1">
+            <Outlet />
+          </main>
+          <SiteFooter />
+        </div>
       </AuthProvider>
     </QueryClientProvider>
+  );
+}
+
+function SiteHeader() {
+  const { session, signOut } = useAuth();
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+        <Link
+          to="/"
+          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+        >
+          <Sparkles className="h-5 w-5 text-primary" />
+          <span
+            className="text-xl font-bold tracking-tight"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Curated
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-2">
+          {!session ? (
+            <div className="flex items-center gap-2">
+              <Link to="/login">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="font-body gap-1.5 cursor-pointer"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Sign In
+                </Button>
+              </Link>
+              <Link to="/signup">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="font-body gap-1.5 cursor-pointer"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Sign Up
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link to="/">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="font-body gap-1.5 cursor-pointer hidden sm:flex"
+                >
+                  <ShoppingBag className="h-4 w-4" />
+                  Storefront
+                </Button>
+              </Link>
+              <Link to="/dashboard">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="font-body gap-1.5 cursor-pointer"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </Button>
+              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={signOut}
+                className="font-body gap-1.5 cursor-pointer ml-2"
+              >
+                <LogOut className="h-4 w-4" />
+                Log Out
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function SiteFooter() {
+  const { session, signOut } = useAuth();
+
+  return (
+    <footer className="border-t border-border mt-12 bg-background">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span
+              className="text-sm font-semibold"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Curated
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-6">
+            {session && (
+              <Button
+                variant="link"
+                size="sm"
+                onClick={signOut}
+                className="font-body text-xs text-muted-foreground hover:text-foreground h-auto p-0 cursor-pointer"
+              >
+                Log Out
+              </Button>
+            )}
+            <p className="font-body text-xs text-muted-foreground">
+              © {new Date().getFullYear()} Curated Marketplace. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </div>
+    </footer>
   );
 }
